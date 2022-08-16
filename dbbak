@@ -3,6 +3,8 @@
 PATH="/sbin:/bin:"
 PATH="${PATH}:/usr/sbin:/usr/bin:"
 PATH="${PATH}:/usr/local/sbin:/usr/local/bin:"
+# for generic linux installation
+PATH="${PATH}:/usr/local/sbin:/usr/local/bin:/opt/percona-xtrabackup-8.0.28-21-Linux-x86_64.glibc2.17/bin"
 export PATH;
 
 usage_exit() {
@@ -212,14 +214,23 @@ cmd_full() {
 
 	echo ${DBBAK_START} > ${DBBAK_CUR_FULL_STAMP};
 
-	innobackupex \
+	# innobackupex \
+	# 	--user=${DBBAK_USER} \
+	# 	--password=${DBBAK_PASSWORD} \
+	# 	--socket=${DBBAK_SOCKET} \
+	# 	${DBBAK_NOLOCK} \
+	# 	${DBBAK_NTHREAD} \
+	# 	${DBBAK_SLAVE} \
+	# 	--no-timestamp ${DBBAK_CUR_FULL} >> ${DBBAK_CUR_FULL_LOG} 2>&1;
+	xtrabackup \
 		--user=${DBBAK_USER} \
 		--password=${DBBAK_PASSWORD} \
 		--socket=${DBBAK_SOCKET} \
 		${DBBAK_NOLOCK} \
 		${DBBAK_NTHREAD} \
 		${DBBAK_SLAVE} \
-		--no-timestamp ${DBBAK_CUR_FULL} >> ${DBBAK_CUR_FULL_LOG} 2>&1;
+		--backup \
+		--target-dir=${DBBAK_CUR_FULL} >> ${DBBAK_CUR_FULL_LOG} 2>&1;
 
 	return=$?
 	tail -n 1 ${DBBAK_CUR_FULL_LOG} |grep -q 'completed OK'
@@ -267,16 +278,27 @@ cmd_incremental() {
 	echo "# DBBAK_CUR_INCR=${DBBAK_CUR_INCR}" >> ${DBBAK_CUR_INCR_LOG} 2>&1;	
 	echo ${DBBAK_START} > ${DBBAK_CUR_INCR_STAMP};
 
-	innobackupex \
+	# innobackupex \
+	# 	--user=${DBBAK_USER} \
+	# 	--password=${DBBAK_PASSWORD} \
+	# 	--socket=${DBBAK_SOCKET} \
+	# 	${DBBAK_NOLOCK} \
+	# 	${DBBAK_NTHREAD} \
+	# 	${DBBAK_SLAVE} \
+	# 	--no-timestamp \
+	# 	--incremental-basedir=${DBBAK_CUR_LAST} \
+	# 	--incremental ${DBBAK_CUR_INCR} \
+	# 	>> ${DBBAK_CUR_INCR_LOG} 2>&1
+	xtrabackup \
 		--user=${DBBAK_USER} \
 		--password=${DBBAK_PASSWORD} \
 		--socket=${DBBAK_SOCKET} \
 		${DBBAK_NOLOCK} \
 		${DBBAK_NTHREAD} \
 		${DBBAK_SLAVE} \
-		--no-timestamp \
+		--backup \
 		--incremental-basedir=${DBBAK_CUR_LAST} \
-		--incremental ${DBBAK_CUR_INCR} \
+		--target-dir ${DBBAK_CUR_INCR} \
 		>> ${DBBAK_CUR_INCR_LOG} 2>&1
 
 	return=$?
@@ -540,8 +562,21 @@ cmd_restore() {
 	# this also yields ignorable 'unknown flags 50' if db > 5.6.16
 	# https://bugs.launchpad.net/percona-server/+bug/1302882
 
-	innobackupex ${DBBAK_RESTORE_MEM} \
-		--apply-log --redo-only ${DBBAK_DBDIR}/
+	# innobackupex ${DBBAK_RESTORE_MEM} \
+	# 	--apply-log --redo-only ${DBBAK_DBDIR}/
+	if [ "$src" != "$base" ]; then
+		# restore incremental backups
+		xtrabackup --prepare \
+			--apply-log-only \
+			--target-dir=${DBBAK_DBDIR}/
+	else
+		# only restore full backups
+		xtrabackup --prepare \
+			--target-dir=${DBBAK_DBDIR}/
+		xtrabackup ${DBBAK_RESTORE_MEM} \
+			--copy-back \
+			--target-dir=${DBBAK_DBDIR}/
+	fi;
 
 	# 
 	# restore incremental backups
@@ -549,18 +584,30 @@ cmd_restore() {
 
  	if [ "$src" != "$base" ]; then
  		inc=0;
- 		while [ "$inc" -le "$nincr" ]; do
+ 		while [ "$inc" -le $((nincr - 1)) ]; do
  			echo "$me: restore incremental $inc of $nincr"
- 			innobackupex ${DBBAK_RESTORE_MEM} \
- 				--apply-log --redo-only ${DBBAK_DBDIR}/ \
+ 			# innobackupex ${DBBAK_RESTORE_MEM} \
+ 			# 	--apply-log --redo-only ${DBBAK_DBDIR}/ \
+ 			# 	--incremental-dir=${incrbase}.${inc}
+			xtrabackup --prepare \
+ 				--apply-log-only\
+				--target-dir=${DBBAK_DBDIR}/ \
  				--incremental-dir=${incrbase}.${inc}
  			inc=$((inc + 1))
  		done
+		echo "$me: restore last incremental $inc of $nincr"
+		xtrabackup --prepare \
+				--target-dir=${DBBAK_DBDIR}/ \
+ 				--incremental-dir=${incrbase}.${inc}
+		xtrabackup ${DBBAK_RESTORE_MEM} \
+			--copy-back \
+			--target-dir=${DBBAK_DBDIR}/
  	fi
 
- 	# apply final logs
-	echo "$me: appyling final logs"
-	innobackupex --apply-log ${DBBAK_DBDIR}/
+ 	# # apply final logs
+	# echo "$me: appyling final logs"
+	# # innobackupex --apply-log ${DBBAK_DBDIR}/
+	# xtrabackup --apply-log ${DBBAK_DBDIR}/
 
 	# set perms (implies perm settings in cfg)
 	echo "$me: setting permissions"

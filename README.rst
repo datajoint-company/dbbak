@@ -18,6 +18,15 @@ since the two mechanisms are somewhat different.
 Database connection and backup store parameters are stored in the
 file /etc/dbbak.cfg, with commands/usage as follows.
 
+Installation
+------------
+    bash prerequisite.sh # install build-essential to use `make`
+
+    make install # except Ubuntu 22.04 Jammy
+
+    make install-generic # including Ubuntu 22.04 Jammy
+
+
 full backup
 -----------
 

@@ -1,0 +1,19 @@
+version: '2.4'
+services:
+  db:
+    image: mysql:8.0.29-debian
+    # image: datajoint/ubuntu_mysql:jammy-generic
+    # build:
+    #   context: ..
+    #   dockerfile: ./test/Dockerfile
+    environment:
+      - MYSQL_ROOT_PASSWORD=simple
+    ports:
+      - "3306:3306"
+    volumes:
+      - ..:/dbbak
+    command: 
+      - bash
+      - -c
+      - |
+        tail -f /dev/null

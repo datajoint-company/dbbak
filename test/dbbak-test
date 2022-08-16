@@ -6,7 +6,9 @@ dbbak incremental
 dbbak ls
 dbbak incremental
 dbbak ls
-dbbak rotate
-dbbak ls
-dbbak purge
-dbbak ls
+# dbbak restore
+# dbbak ls
+# dbbak rotate
+# dbbak ls
+# dbbak purge
+# dbbak ls
